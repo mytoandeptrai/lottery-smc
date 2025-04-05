@@ -1,0 +1,34 @@
+{
+  "name": "lottery-smc",
+  "version": "1.0.0",
+  "description": "Decentralized Lottery Smart Contract",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat test",
+    "compile": "npx hardhat compile",
+    "clean": "npx hardhat clean",
+    "node": "npx hardhat node",
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
+    "deploy:sepolia": "npx hardhat run scripts/deploy.js --network sepolia",
+    "deploy:bsc": "npx hardhat run scripts/deploy.js --network bscTestnet",
+    "interact": "npx hardhat run scripts/interact.js --",
+    "console:local": "npx hardhat console --network localhost",
+    "console:sepolia": "npx hardhat console --network sepolia",
+    "console:bsc": "npx hardhat console --network bscTestnet"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "smart-contract",
+    "lottery",
+    "solidity"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.13",
+    "dotenv": "^16.4.7",
+    "hardhat": "^2.22.19"
+  }
+}
