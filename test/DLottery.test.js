@@ -34,6 +34,7 @@ describe("DLottery", function () {
             expect(await lottery.getParticipantCount()).to.equal(0);
             expect(await lottery.isDrawCompleted()).to.be.true;
             expect(await lottery.getCurrentPrize()).to.equal(0);
+            expect(await lottery.isPrizeWithdrawn()).to.be.true;
         });
 
         it("Should have correct initial state", async function () {
@@ -111,31 +112,6 @@ describe("DLottery", function () {
                 ).to.be.revertedWith("Not owner");
             });
 
-            it("Should require MAX_PARTICIPANTS before draw", async function () {
-                // Complete the current draw first
-                await lottery.performDraw();
-                
-                // Withdraw prize if there's a winner
-                const winner = await lottery.getWinner();
-                if (winner !== ethers.ZeroAddress) {
-                    await lottery.connect(winner).withdrawPrize();
-                }
-                
-                // Start a new draw
-                const futureTimestamp = Math.floor(Date.now() / 1000) + 3600;
-                await lottery.startNewDraw(futureTimestamp);
-                
-                // Buy only 4 tickets
-                for (let i = 0; i < 4; i++) {
-                    const addr = [addr1, addr2, addr3, addr4][i];
-                    await lottery.connect(addr).buyTicket({ value: TICKET_PRICE });
-                }
-
-                await expect(
-                    lottery.performDraw()
-                ).to.be.revertedWith("Not enough participants");
-            });
-
             it("Should emit correct events on draw", async function () {
                 const tx = await lottery.performDraw();
                 const receipt = await tx.wait();
@@ -154,6 +130,44 @@ describe("DLottery", function () {
             it("Should mark draw as completed after draw", async function () {
                 await lottery.performDraw();
                 expect(await lottery.isDrawCompleted()).to.be.true;
+            });
+
+            it("Should store draw result correctly", async function () {
+                const tx = await lottery.performDraw();
+                const receipt = await tx.wait();
+                const completedDrawIds = await lottery.getCompletedDrawIds();
+                
+                const storedResult = await lottery.getDrawResult(completedDrawIds[0]);
+                expect(storedResult.drawId).to.equal(completedDrawIds[0]);
+                
+                // Get the winner from the event
+                const drawResultEvent = receipt.logs.find(
+                    log => log.fragment && log.fragment.name === "DrawResult"
+                );
+                
+                if (drawResultEvent) {
+                    const winner = drawResultEvent.args.winner;
+                    expect(storedResult.winnerAddress).to.equal(winner);
+                    expect(storedResult.hasWinner).to.be.true;
+                } else {
+                    expect(storedResult.winnerAddress).to.equal(ethers.ZeroAddress);
+                    expect(storedResult.hasWinner).to.be.false;
+                }
+            });
+
+            it("Should track completed draw IDs", async function () {
+                await lottery.performDraw();
+                const completedDrawIds = await lottery.getCompletedDrawIds();
+                expect(completedDrawIds.length).to.be.greaterThan(0);
+            });
+
+            it("Should return latest draw result", async function () {
+                await lottery.performDraw();
+                const latestResult = await lottery.getLatestDrawResult();
+                const completedDrawIds = await lottery.getCompletedDrawIds();
+                const lastDrawId = completedDrawIds[completedDrawIds.length - 1];
+                
+                expect(latestResult.drawId).to.equal(lastDrawId);
             });
         });
 

@@ -36,6 +36,17 @@ contract DLottery {
     bool private locked;                         // Reentrancy guard
     bool private prizeWithdrawn;                 // Whether the prize has been withdrawn
     
+    // --- Draw History Management ---
+    struct DrawPerformResult {
+        uint256 drawId;
+        uint256 winningTicket;
+        address winnerAddress;
+        bool hasWinner;
+    }
+    
+    mapping(uint256 => DrawPerformResult) private drawResults;  // Maps draw IDs to their results
+    uint256[] private completedDrawIds;                         // Array of completed draw IDs
+    
     // ============================================
     // EVENTS
     // ============================================
@@ -87,8 +98,10 @@ contract DLottery {
      */
     function startNewDraw(uint256 timestamp) external payable {
         require(drawCompleted, "Previous lottery still in progress");
+        // Only allow starting a new draw when there's no winner or the prize has been withdrawn
         require(winner == address(0) || prizeWithdrawn, "Previous winner has not claimed the prize yet");
         
+        // Reset winner
         winner = address(0);
         
         if (currentPrize == 0) {
@@ -101,6 +114,7 @@ contract DLottery {
         drawCompleted = false;
         prizeWithdrawn = false;
 
+        // Reset participant statuses
         for (uint256 i = 1; i <= MAX_AVAILABLE_TICKETS; i++) {
             address participant = ticketToParticipant[i];
             if (participant != address(0)) {
@@ -109,6 +123,7 @@ contract DLottery {
             }
         }
 
+        // Reset available tickets
         delete availableTickets;
         for (uint256 i = 1; i <= MAX_AVAILABLE_TICKETS; i++) {
             availableTickets.push(i);
@@ -145,9 +160,9 @@ contract DLottery {
 
     /**
      * @dev Executes the lottery draw to determine a winner
-     * @return The winning ticket number
+     * @return The draw result
      */
-    function performDraw() external onlyOwner nonReentrant returns (uint256) {
+    function performDraw() external onlyOwner nonReentrant returns (DrawPerformResult memory) {
         require(participantCount == MAX_PARTICIPANTS, "Not enough participants");
         require(!drawCompleted, "Lottery already completed");
 
@@ -155,18 +170,45 @@ contract DLottery {
         address winnerAddress = ticketToParticipant[winningTicket];
         winner = winnerAddress;
         drawCompleted = true;
-
+        
+        DrawPerformResult memory result;
+        
         if (winnerAddress != address(0)) {
+            // Store the result
+            result = DrawPerformResult({
+                drawId: drawId,
+                winningTicket: winningTicket,
+                winnerAddress: winnerAddress,
+                hasWinner: true
+            });
+            
+            // Save the result in storage
+            drawResults[drawId] = result;
+            completedDrawIds.push(drawId);
+            
             emit DrawResult(drawId, winningTicket, winnerAddress);
         } else {
+            // Case where there's no winner
+            result = DrawPerformResult({
+                drawId: drawId,
+                winningTicket: winningTicket,
+                winnerAddress: address(0),
+                hasWinner: false
+            });
+            
+            // Save the result in storage
+            drawResults[drawId] = result;
+            completedDrawIds.push(drawId);
+            
             emit NoWinner(drawId, winningTicket);
+            
             // Prepare for the next round
             winner = address(0);
             prizeWithdrawn = true; // Allow starting a new draw
             drawId += 1;
         }
-
-        return winningTicket;
+        
+        return result;
     }
 
     /**
@@ -182,6 +224,7 @@ contract DLottery {
         currentPrize = 0;
         prizeWithdrawn = true;
 
+        // Increment drawId and reset state for a new draw
         drawId += 1;
         
         (bool sent, ) = payable(msg.sender).call{value: prize}("");
@@ -265,6 +308,37 @@ contract DLottery {
     // ============================================
     // EXTERNAL VIEW FUNCTIONS - GETTERS
     // ============================================
+    
+    /**
+     * @dev Returns the result of a specific draw
+     * @param _drawId The ID of the draw to query
+     * @return The draw result
+     */
+    function getDrawResult(uint256 _drawId) external view returns (DrawPerformResult memory) {
+        require(_drawId > 0 && _drawId <= drawId, "Invalid draw ID");
+        require(drawResults[_drawId].drawId == _drawId, "Draw result not found");
+        
+        return drawResults[_drawId];
+    }
+    
+    /**
+     * @dev Returns the result of the latest completed draw
+     * @return The latest draw result
+     */
+    function getLatestDrawResult() external view returns (DrawPerformResult memory) {
+        require(completedDrawIds.length > 0, "No completed draws yet");
+        
+        uint256 latestCompletedDrawId = completedDrawIds[completedDrawIds.length - 1];
+        return drawResults[latestCompletedDrawId];
+    }
+    
+    /**
+     * @dev Returns all completed draw IDs
+     * @return Array of completed draw IDs
+     */
+    function getCompletedDrawIds() external view returns (uint256[] memory) {
+        return completedDrawIds;
+    }
     
     /**
      * @dev Returns whether the prize has been withdrawn
